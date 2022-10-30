@@ -74,7 +74,7 @@ const deleteStat = (req, res) => {
     return res.status(200).json({ message: 'OK' });
 };
 
-const downloadUpload = async (req, torrent) => {
+const uploadToDrive = async (req, torrent) => {
     const oauth2Client = new google.auth.OAuth2();
     let error = {};
 
@@ -176,7 +176,7 @@ const downloadUpload = async (req, torrent) => {
     return error;
 };
 
-const downloadTorrent = async (req, res) => {
+const downloadTorrentUsingMagnet = async (req, res) => {
     let error = {};
     var magnetURI = req.query.magnet;
 
@@ -190,7 +190,7 @@ const downloadTorrent = async (req, res) => {
         let torrent = torrentClient.get(magnetURI);
 
         if (torrent !== null) {
-            error = await downloadUpload(req, torrent);
+            error = await uploadToDrive(req, torrent);
 
             if (Object.keys(error).length == 0) {
                 let stats = {
@@ -209,23 +209,18 @@ const downloadTorrent = async (req, res) => {
             }
         } else {
             torrentClient.add(magnetURI, options, function (torrent) {
-                console.log('Client is downloading: ', torrent.infoHash);
+                console.log('Client is downloading: ', torrent.name);
 
-                torrent.on('download', function (bytes) {
-                    let stats = {
-                        name: torrent.name,
-                        infoHash: torrent.infoHash,
-                        progress: (torrent.progress * 100).toFixed(2) + '%',
-                        timeRemaining: torrent.timeRemaining,
+                let statsLogger = setInterval(() => {
+                    stats = {
                         downloaded: (torrent.downloaded / (1024 * 1024)).toFixed(3) + ' MB',
                         speed: (torrent.downloadSpeed / (1024 * 1024)).toFixed(3) + ' MB/sec',
                         totalSize: (torrent.length / (1024 * 1024)).toFixed(3) + ' MB',
                     };
-
                     console.log(stats.downloaded + ' of ' + stats.totalSize + ' @ ' + stats.speed);
-                });
+                }, 1000);
 
-                var interval = setInterval(function () {
+                let interval = setInterval(function () {
                     torrent.resume();
                     stats = {
                         name: torrent.name,
@@ -242,10 +237,11 @@ const downloadTorrent = async (req, res) => {
 
                 torrent.on('done', async function () {
                     clearInterval(interval);
+                    clearInterval(statsLogger);
 
                     console.log('Client has finished downloading:', torrent.infoHash);
 
-                    error = await downloadUpload(req, torrent);
+                    error = await uploadToDrive(req, torrent);
 
                     if (Object.keys(error).length == 0) {
                         let stats = {
@@ -281,7 +277,7 @@ const downloadTorrent = async (req, res) => {
 module.exports = {
     getStats: getStats,
     deleteStat: deleteStat,
-    downloadTorrent: downloadTorrent,
+    downloadTorrentUsingMagnet: downloadTorrentUsingMagnet,
 };
 
 /* ___________________________________________________________________________*/
